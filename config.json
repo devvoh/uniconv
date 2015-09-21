@@ -1,0 +1,52 @@
+{
+    "config": {
+        "settings": {
+            "pass_size": "50",
+            "ignore_errors": "1",
+            "log_file": "uniconv.log"
+        },
+        "databases": {
+            "source": {
+                "type": "mysql",
+                "location": "localhost",
+                "database": "source_db",
+                "user": "user",
+                "password": "password"
+            },
+            "target": {
+                "type": "sqlite3",
+                "location": "./database.db"
+            }
+        }
+    },
+    "conversions": {
+        "users": {
+            "id": {
+                "source": "Users.UserId",
+                "target": "user.id"
+            },
+            "username": {
+                "source": "Users.UserName",
+                "target": "user.username"
+            },
+            "email": {
+                "source": "Users.Email",
+                "target": "user.email"
+            },
+            "group_id": {
+                "source": "Users.GroupId",
+                "target": "user.group_id"
+            }
+        },
+        "passwords": {
+            "password": {
+                "source": "Users.PasswordId",
+                "target": "password.value",
+                "also": {
+                    "source": "Users.UserId",
+                    "target": "password.user_id"
+                }
+            }
+        }
+    }
+}
