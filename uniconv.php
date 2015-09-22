@@ -215,6 +215,286 @@ class converter {
     
 }
 
+class query {
+
+    protected $db;
+    protected $tableName;
+    protected $tableKey;
+    protected $select = '*';
+    protected $action = 'select';
+    protected $where = array();
+    protected $values = array();
+    protected $orderBy = array();
+    protected $groupBy = array();
+    protected $limit;
+
+    /**
+     * On construct, if we're given an object, use this object to set the tableName & key
+     *
+     * @param stdClass $object
+     * @return query
+     */
+    public function __construct($object = null) {
+        if ($object !== null && is_object($object)) {
+            $this->setTableName($object->getTableName());
+            $this->setTableKey($object->getTableKey());
+        }
+        return $this;
+    }
+
+    /**
+     * Set the tableName to work on
+     *
+     * @param string $tableName
+     * @return query
+     */
+    public function setTableName($tableName) {
+        $this->tableName = $tableName;
+        return $this;
+    }
+
+    /**
+     * Get the currently set tableName
+     *
+     * @return string
+     */
+    public function getTableName() {
+        return $this->tableName;
+    }
+
+    /**
+     * Set the tableKey to work with (for delete & update
+     * )
+     * @param string $key
+     * @return query
+     */
+    public function setTableKey($key) {
+        $this->tableKey = $key;
+        return $this;
+    }
+
+    /**
+     * Set the type of query we're going to do
+         *
+         * @param string $action (select, insert, delete, update)
+         */
+     public function setAction($action) {
+         if (in_array($action, array('select', 'insert', 'delete', 'update'))) {
+             $this->action = $action;
+         }
+         return $this;
+     }
+
+     /**
+      * In case of a select, what we're going to select (default *)
+      *
+      * @param string $select
+      * @return query
+      */
+     public function select($select) {
+         $this->select = $select;
+         return $this;
+     }
+
+     /**
+      * Adds a where condition for relevant queries
+      *
+      * @param string $condition
+      * @param mixed $value
+      * @return query
+      */
+     public function where($condition, $value = null) {
+         $this->where[] = array('condition' => $condition, 'value' => $value);
+         return $this;
+     }
+
+     /**
+      * Adds a value to update/insert queries
+      *
+      * @param string $key
+      * @param mixed $value
+      * @return query
+      */
+     public function addValue($key, $value) {
+         $this->values[] = array('key' => $key, 'value' => $value);
+         return $this;
+     }
+
+     /**
+      * Sets the order for select queries
+      *
+      * @param string $key
+      * @param string $direction (default DESC)
+      * @return query
+      */
+     public function orderBy($key, $direction = 'DESC') {
+         $this->orderBy[] = array('key' => $key, 'direction' => $direction);
+         return $this;
+     }
+
+     /**
+      * Sets the group by for select queries
+      *
+      * @param string $key
+      * @return query
+      */
+     public function groupBy($key) {
+         $this->groupBy[] = $key;
+         return $this;
+     }
+
+     /**
+      * Sets the limit
+      *
+      * @param int $limit
+      * @param int $offset
+      * @return query
+      */
+     public function limit($limit, $offset = null) {
+         $this->limit = array('limit' => $limit, 'offset' => $offset);
+         return $this;
+     }
+     
+     /**
+      * Sets a db to quote on
+      * 
+      * @param PDO $db
+      * @return query
+      */
+     public function setDb($db) {
+         $this->db = $db;
+         return $this;
+     }
+
+     /**
+      * Outputs the actual query for use, empty string if invalid/incomplete values given
+      *
+      * @return string
+      */
+     public function __toString() {
+         $query = array();
+         
+         if ($this->action === 'select') {
+
+             // set select & what needs to be selected
+             $query[] = "SELECT " . $this->select;
+             // table
+             $query[] = "FROM " . $this->tableName;
+
+             // now get the where clauses
+             if (count($this->where) > 0) {
+                 $wheres = array();
+                 foreach ($this->where as $where) {
+                     if ($where['value'] !== null) {
+                         $wheres[] = str_replace('?', app::getDb()->quote($where['value']), $where['condition']);
+                     } else {
+                         $wheres[] = $where['condition'];
+                     }
+                 }
+                 $query[] = "WHERE " . implode(' AND ', $wheres);
+             }
+
+             // now get the order(s)
+             if (count($this->orderBy) > 0) {
+                 $orders = array();
+                 foreach ($this->orderBy as $orderBy) {
+                     $orders[] = $orderBy['key'] . ' ' . $orderBy['direction'];
+                 }
+                 $query[] = "ORDER BY " . implode(', ', $orders);
+             }
+
+             // now get the group(s)
+             if (count($this->groupBy) > 0) {
+                 $groups = array();
+                 foreach ($this->groupBy as $groupBy) {
+                     $groups[] = $groupBy;
+                 }
+                 $query[] = "GROUP BY " . implode(', ', $groups);
+             }
+
+             // and the limit
+             if (is_array($this->limit)) {
+                 if ($this->limit['offset'] !== null && $this->limit['limit'] !== null) {
+                     $query[] = "LIMIT " . $this->limit['offset'] . ", " . $this->limit['limit'];
+                 } elseif ($this->limit['limit'] !== null) {
+                     $query[] = "LIMIT " . $this->limit['limit'];
+                 }
+             }
+
+         } elseif ($this->action === 'delete') {
+
+             // set delete to the proper table
+             $query[] = "DELETE FROM " . $this->tableName;
+
+             // now get the where clauses
+             if (count($this->where) > 0) {
+                 $wheres = array();
+                 foreach ($this->where as $where) {
+                     if ($where['value'] !== null) {
+                         $wheres[] = str_replace('?', app::getDb()->quote($where['value']), $where['condition']);
+                     } else {
+                         $wheres[] = $where['condition'];
+                     }
+                 }
+                 $query[] = "WHERE " . implode(' AND ', $wheres);
+             } else {
+                 $query = [];
+             }
+
+         } elseif ($this->action === 'update') {
+
+             // set update to the proper table
+             $query[] = "UPDATE " . $this->tableName;
+
+             // now get the values
+             if (count($this->values) > 0) {
+                 $values = array();
+                 foreach ($this->values as $value) {
+                     // skip id, since we'll use that as a where condition
+                     if ($value['key'] !== $this->tableKey) {
+                         $values[] = "'" . $value['key'] . "'=" . $this->db->quote($value['value']);
+                     } else {
+                         $tableKey = $value['key'];
+                         $tableKeyValue = $value['value'];
+                     }
+                 }
+                 $query[] = "SET " . implode(',', $values);
+                 $query[] = "WHERE " . $tableKey . " = " . $this->db->quote($tableKeyValue);
+             } else {
+                 $query = [];
+             }
+
+         } elseif ($this->action === 'insert') {
+
+             // set insert to the proper table
+             $query[] = "INSERT INTO " . $this->tableName;
+
+             // now get the values
+             if (count($this->values) > 0) {
+                 foreach ($this->values as $value) {
+                     $keys[] = "'" . $value['key'] . "'";
+                     $values[] = $this->db->quote($value['value']);
+                 }
+
+                 $query[] = "(" . implode(',', $keys) . ")";
+                 $query[] = "VALUES";
+                 $query[] = "(" . implode(',', $values) . ")";
+             } else {
+                 $query = [];
+             }
+
+         }
+
+         // and now implode it into a nice string, if possible
+         if (count($query) > 0) {
+             return implode(' ', $query);
+         }
+         return '';
+
+     }
+
+}
+
 cli::parseParameters($argv);
 
 config::setFilename(cli::getParameter('config'));
@@ -222,14 +502,75 @@ if (!config::load()) {
     cli::end();
 }
 
-foreach (converter::getConversions() as $entity => $fields) {
-    $total = 1000;//rand(0, 100);
-    for ($i = 0; $i <= $total; $i++) {
-        $padded = str_pad($i.'/'.$total, 12, ' ', STR_PAD_RIGHT);
-        cli::progress($padded . 'Converting entity "' . $entity . '"...');
-        // Sleep .01 seconds: 10000
-        $sleep = 1000 * mt_rand(0, 1000);
-        usleep($sleep);
+// Make database connections - first source
+switch (converter::getDbSource('type')) {
+    case 'mysql':
+        $pdoString  = 'mysql:host=' . converter::getDbSource('location');
+        $pdoString .= ';dbname=' . converter::getDbSource('database');
+        $dbSource = new PDO($pdoString, converter::getDbSource('user'), converter::getDbSource('password'));
+        break;
+    case 'sqlite3':
+        $dbSource = new PDO('sqlite:' . converter::getDbSource('location'));
+        break;
+}
+switch (converter::getDbTarget('type')) {
+    case 'mysql':
+        $pdoString  = 'mysql:host' . converter::getDbTarget('location');
+        $pdoString .= ';dbname=' . converter::getDbTarget('database');
+        $dbTarget = new PDO($pdoString, converter::getDbTarget('user'), converter::getDbTarget('password'));
+        break;
+    case 'sqlite3':
+        $dbTarget = new PDO('sqlite:' . converter::getDbTarget('location'));
+        break;
+}
+$dbSource->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$dbTarget->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+foreach (converter::getConversions() as $entity => $data) {
+    $start = microtime(true);
+    // Now get all the values from the data
+    $sourceTable = $data['tables']['source'];
+    $targetTable = $data['tables']['target'];
+    $fields      = $data['fields'];
+    
+    // Decide whether there's a condition to take into account
+    $where = null;
+    if (isset($data['tables']['where'])) {
+        $where = explode(' ', $data['tables']['where']);
+        if ($data['tables']['wheretype'] == 'value') {
+            $key = $where[0] . ' ' . $where[1];
+            $value = $dbTarget->quote($where[2]);
+            $where = $key . $value;
+        } elseif ($data['tables']['wheretype'] == 'fields') {
+            $where = implode($where, ' ');
+        }
     }
+    
+    // Now get all the entities from the source table
+    $select = 'select * from ' . $sourceTable . ($where ? ' where ' . $where : '');
+//     cli::write($select);
+    $rows = $dbSource->query($select)->fetchAll();
+    $i = 1;
+    foreach ($rows as $row) {    
+        cli::progress($entity . ' ' . $i . '/' . count($rows) . '...');
+        $query = (new query())->setDb($dbTarget)->setTableName($targetTable)->setAction('insert');
+        foreach ($fields as $fieldData) {
+            $value = $row[$fieldData['source']];
+            if (isset($fieldData['convert'])) {
+                switch ($fieldData['convert']) {
+                    case 'timestamp_to_datetime': 
+                        $dateTime = new DateTime();
+                        $dateTime->setTimestamp($value);
+                        $value = $dateTime->format('Y-m-d H:i:s');
+                        break;
+                }
+            }
+            $query->addValue($fieldData['target'], $value);
+        }
+        $dbTarget->query($query);
+        $i++;
+    }
+    $time = microtime(true) - $start;
+    cli::progress($entity . ' ' . ($i - 1) . '/' . count($rows) . '... finished in ' . number_format($time, 3) . 's');
     cli::nl();
 }
