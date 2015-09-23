@@ -24,11 +24,11 @@ class cli {
         print_r($message);
         echo PHP_EOL;
     }
-    
+
     public static function addLine($message) {
         self::$lines[] = $message;
     }
-    
+
     public static function writeLines() {
         $output = implode(self::$lines, PHP_EOL);
         self::write($output);
@@ -53,7 +53,7 @@ class cli {
             }
         }
     }
-    
+
     public static function getParameters() {
         return self::$parameters;
     }
@@ -93,27 +93,27 @@ class cli {
         self::$lastProgressLength = strlen($message);
         echo $message;
     }
-    
+
     public static function end() {
         self::writeLines();
         exit;
-    } 
-    
+    }
+
 }
 
 class config {
-    
+
     public static $filename = null;
     public static $config = null;
-    
+
     public static function setFilename($filename) {
         self::$filename = $filename;
     }
-    
+
     public static function getFilename() {
         return self::$filename;
     }
-    
+
     public static function load() {
         if (!self::$filename) {
             cli::addLine('No config filename given. Use uniconv -config config.json');
@@ -128,7 +128,7 @@ class config {
             cli::addLine('Invalid config file: ' . self::$filename);
             return false;
         }
-        
+
         // Now set the relevant config values on the converter
         converter::setSettings(self::$config['config']['settings']);
         converter::setDbSource(self::$config['config']['databases']['source']);
@@ -136,11 +136,11 @@ class config {
         converter::setConversions(self::$config['conversions']);
         return true;
     }
-    
+
     public static function getConfig($key = null) {
         return self::$config;
     }
-    
+
 }
 
 class converter {
@@ -155,7 +155,7 @@ class converter {
         self::$settings['ignore_errors']    = (int)$settings['ignore_errors'];
         self::$settings['log_file']         = (int)$settings['log_file'];
     }
-    
+
     public static function getSettings($key) {
         if ($key) {
             if (isset(self::$settings[$key])) {
@@ -170,7 +170,7 @@ class converter {
     public static function setDbSource($dbSource) {
         self::$dbSource = $dbSource;
     }
-    
+
     public static function getDbSource($key = null) {
         if ($key) {
             if (isset(self::$dbSource[$key])) {
@@ -180,13 +180,13 @@ class converter {
             }
         }
         return self::$dbSource;
-        
+
     }
 
     public static function setDbTarget($dbTarget) {
         self::$dbTarget = $dbTarget;
     }
-    
+
     public static function getDbTarget($key = null) {
         if ($key) {
             if (isset(self::$dbTarget[$key])) {
@@ -201,7 +201,7 @@ class converter {
     public static function setConversions($conversions) {
         self::$conversions = $conversions;
     }
-    
+
     public static function getConversions($key = null) {
         if ($key) {
             if (isset(self::$conversions[$key])) {
@@ -212,7 +212,7 @@ class converter {
         }
         return self::$conversions;
     }
-    
+
 }
 
 class query {
@@ -354,10 +354,10 @@ class query {
          $this->limit = array('limit' => $limit, 'offset' => $offset);
          return $this;
      }
-     
+
      /**
       * Sets a db to quote on
-      * 
+      *
       * @param PDO $db
       * @return query
       */
@@ -373,7 +373,7 @@ class query {
       */
      public function __toString() {
          $query = array();
-         
+
          if ($this->action === 'select') {
 
              // set select & what needs to be selected
@@ -495,6 +495,25 @@ class query {
 
 }
 
+class generatePDO {
+
+    public static function get($config) {
+        switch ($config['type']) {
+            case 'mysql':
+                $pdoString  = 'mysql:host=' . $config['location'];
+                $pdoString .= ';dbname=' . $config['database'];
+                $pdo = new PDO($pdoString, $config['user'], $config['password']);
+                break;
+            case 'sqlite':
+                $pdo = new PDO('sqlite:' . $config['location']);
+                break;
+        }
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        return $pdo;
+    }
+
+}
+
 cli::parseParameters($argv);
 
 config::setFilename(cli::getParameter('config'));
@@ -503,28 +522,8 @@ if (!config::load()) {
 }
 
 // Make database connections - first source
-switch (converter::getDbSource('type')) {
-    case 'mysql':
-        $pdoString  = 'mysql:host=' . converter::getDbSource('location');
-        $pdoString .= ';dbname=' . converter::getDbSource('database');
-        $dbSource = new PDO($pdoString, converter::getDbSource('user'), converter::getDbSource('password'));
-        break;
-    case 'sqlite3':
-        $dbSource = new PDO('sqlite:' . converter::getDbSource('location'));
-        break;
-}
-switch (converter::getDbTarget('type')) {
-    case 'mysql':
-        $pdoString  = 'mysql:host' . converter::getDbTarget('location');
-        $pdoString .= ';dbname=' . converter::getDbTarget('database');
-        $dbTarget = new PDO($pdoString, converter::getDbTarget('user'), converter::getDbTarget('password'));
-        break;
-    case 'sqlite3':
-        $dbTarget = new PDO('sqlite:' . converter::getDbTarget('location'));
-        break;
-}
-$dbSource->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-$dbTarget->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$dbSource = generatePDO::get(converter::getDbSource());
+$dbTarget = generatePDO::get(converter::getDbTarget());
 
 foreach (converter::getConversions() as $entity => $data) {
     $start = microtime(true);
@@ -532,7 +531,7 @@ foreach (converter::getConversions() as $entity => $data) {
     $sourceTable = $data['tables']['source'];
     $targetTable = $data['tables']['target'];
     $fields      = $data['fields'];
-    
+
     // Decide whether there's a condition to take into account
     $where = null;
     if (isset($data['tables']['where'])) {
@@ -545,20 +544,19 @@ foreach (converter::getConversions() as $entity => $data) {
             $where = implode($where, ' ');
         }
     }
-    
+
     // Now get all the entities from the source table
     $select = 'select * from ' . $sourceTable . ($where ? ' where ' . $where : '');
-//     cli::write($select);
     $rows = $dbSource->query($select)->fetchAll();
     $i = 1;
-    foreach ($rows as $row) {    
+    foreach ($rows as $row) {
         cli::progress($entity . ' ' . $i . '/' . count($rows) . '...');
         $query = (new query())->setDb($dbTarget)->setTableName($targetTable)->setAction('insert');
         foreach ($fields as $fieldData) {
             $value = $row[$fieldData['source']];
             if (isset($fieldData['convert'])) {
                 switch ($fieldData['convert']) {
-                    case 'timestamp_to_datetime': 
+                    case 'timestamp_to_datetime':
                         $dateTime = new DateTime();
                         $dateTime->setTimestamp($value);
                         $value = $dateTime->format('Y-m-d H:i:s');

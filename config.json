@@ -14,7 +14,7 @@
                 "password": "password"
             },
             "target": {
-                "type": "sqlite3",
+                "type": "sqlite",
                 "location": "./database.db"
             }
         }
